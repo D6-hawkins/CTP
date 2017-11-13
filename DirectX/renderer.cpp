@@ -42,6 +42,7 @@ ID3D11RenderTargetView *backbuffer; //Pointer to the render target
 ID3D11VertexShader *pVS; //the vertex shader
 ID3D11PixelShader *pPS; //the pixel shader
 ID3D11Buffer *pVBuffer; // The Vertex Buffer
+ID3D11Buffer *pIBuffer; //Index Buffer
 ID3D11InputLayout *pLayout; //Layout for shaders
 ID3D11Buffer *cbPerObjectBuffer; //Buffer to store constant buffer variables
 HWND hWnd;
@@ -88,6 +89,7 @@ double frameTime;
 //global struct
 struct VERTEX
 {
+	FLOAT normx, normy, normz; //normal position
 	FLOAT x, y, z; //position
 	D3DXCOLOR Colour; // Colour
 };
@@ -246,6 +248,16 @@ void InitD3D(HWND hWnd) //The creation of Direct3D to use it
 	//set the render target as the back buffer
 	devcon->OMSetRenderTargets(1, &backbuffer, NULL);
 
+	//Rasterizer setup
+	ID3D11RasterizerState *pRasterizerState;
+
+	D3D11_RASTERIZER_DESC Rast;
+
+	Rast.FillMode = D3D11_FILL_SOLID;
+	Rast.CullMode = D3D11_CULL_NONE;
+
+	dev->CreateRasterizerState(&Rast, &pRasterizerState);
+
 	//Set the Viewport
 	D3D11_VIEWPORT viewport;
 	ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
@@ -268,6 +280,7 @@ void CleanD3D() //This cleans up Direct3D and COM
 	pVS->Release();
 	pPS->Release();
 	pVBuffer->Release();
+	pIBuffer->Release();
 	swapchain->Release();
 	backbuffer->Release();
 	dev->Release();
@@ -286,7 +299,7 @@ void RenderFrame(double time) //renders a single frame
 	UINT stride = sizeof(VERTEX);
 	UINT offset = 0;
 	devcon->IASetVertexBuffers(0, 1, &pVBuffer, &stride, &offset);
-
+	devcon->IASetIndexBuffer(pIBuffer, DXGI_FORMAT_R16_UINT, 0);
 	//Set the world projection matrix for the camera
 	World = DirectX::XMMatrixIdentity();
 
@@ -302,7 +315,8 @@ void RenderFrame(double time) //renders a single frame
 
 	//draw the vertex bufer to the back buffer
 	DetectInput(time);
-	devcon->Draw(3, 0);
+	//devcon->Draw(8, 0);
+	devcon->DrawIndexed(100, 0, 0);
 	//switch te back buffer and front buffer
 	swapchain->Present(0, 0); // this means everything drawn in the back buffer appears
 }
@@ -323,11 +337,12 @@ void InitPipeline()
 	//create the input layout object
 	D3D11_INPUT_ELEMENT_DESC ied[] =
 	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
 	};
 
-	dev->CreateInputLayout(ied, 2, VS->GetBufferPointer(), VS->GetBufferSize(), &pLayout);
+	dev->CreateInputLayout(ied, 3, VS->GetBufferPointer(), VS->GetBufferSize(), &pLayout);
 	devcon->IASetInputLayout(pLayout);
 
 	D3D11_BUFFER_DESC cbbd;
@@ -350,12 +365,23 @@ void InitPipeline()
 }
 void InitGraphics()
 {
+	float length = 1.0f;
+	float height = 1.0f;
+	float width = 1.0f;
+
+	DirectX::XMVECTOR blockPos = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
 	//create a triangle using the VERTEX struct
 	VERTEX Vertices[] =
 	{
-		{ 0.0f, 0.0f, 0.0f, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //top left
-		{ 0.5f, -0.0f, 0.0f, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) }, //top right
-		{ 0.0f, -0.5f, 0.0f, D3DXCOLOR(0.0f, 0.0f, 1.0f, 1.0f) }, //bot left
+		{ 0.0f, 0.0f, 1.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+
+		{ 0.0f, 0.0f, 1.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 1.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
 	};
 
 	//create the vertex buffer
@@ -363,7 +389,7 @@ void InitGraphics()
 	ZeroMemory(&bd, sizeof(bd));
 
 	bd.Usage = D3D11_USAGE_DYNAMIC; //write access by CPU and GPU
-	bd.ByteWidth = sizeof(VERTEX) * 3; // Size is the VERTEX struct * 3
+	bd.ByteWidth = sizeof(VERTEX) * 8; // Size is the VERTEX struct * 4 - change depending on vertex contained
 	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; // Use as a vertex buffer
 	bd.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE; //Allow CPU to write to buffer
 
@@ -374,6 +400,40 @@ void InitGraphics()
 	devcon->Map(pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); //Map the buffer
 	memcpy(ms.pData, Vertices, sizeof(Vertices)); //Copy the data
 	devcon->Unmap(pVBuffer, NULL);
+
+	//Indices array
+	short indices[] =
+	{
+		0, 1, 2, //side list
+		2, 1, 3,
+		4, 0, 6,
+		6, 0, 2,
+		7, 5, 6,
+		6, 5, 4,
+		3, 1, 7,
+		7, 1, 5,
+		4, 5, 0,
+		0, 5, 1,
+		3, 7, 2,
+		2, 7, 6,
+
+	};
+	//create the index buffer
+	D3D11_BUFFER_DESC id;
+	ZeroMemory(&id, sizeof(id));
+
+	//defines allowed usage
+	id.Usage = D3D11_USAGE_DYNAMIC;
+	id.ByteWidth = sizeof(indices) * 12;
+	id.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	id.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE;
+
+	dev->CreateBuffer(&id, NULL, &pIBuffer); // creates the buffer
+
+	D3D11_MAPPED_SUBRESOURCE is;
+	devcon->Map(pIBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &is);
+	memcpy(is.pData, indices, sizeof(indices));
+	devcon->Unmap(pIBuffer, NULL);
 }
 void UpdateCamera()
 {
