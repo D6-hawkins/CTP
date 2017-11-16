@@ -1,126 +1,23 @@
 //Inclusion of basic windows header files and direct3D header files
-#include <Windows.h>
-#include <windowsx.h>
-#include <d3d11.h>
-#include <D3DX11.h>
-#include <D3DX10.h>
-#include <DirectXMath.h>
-//Screen resolution directives
+#include "renderer.h"
 #define SCREEN_WIDTH 800
 #define SCREEN_HEIGHT 600
-//include Direct3D library files
-#pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "d3dx11.lib")
-#pragma comment (lib, "d3dx10.lib")
-//Include Direct3D Input files
-#pragma comment (lib, "dinput8.lib")
-#pragma comment (lib, "dxguid.lib")
-#include <dinput.h>
-#include <iostream>
-#include <sstream>
+//LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+
 //Input controls
-IDirectInputDevice8 *DiKeyboard;
-IDirectInputDevice8 *DiMouse;
-
-DIMOUSESTATE mouseLastState;
-LPDIRECTINPUT8 DirectInput;
-
-float rotx = 0;
-float rotz = 0;
-float scaleX = 1.0f;
-float scaleY = 1.0f;
-
-DirectX::XMMATRIX RotationX;
-DirectX::XMMATRIX RotationY;
-
-//global declarations
-IDXGISwapChain *swapchain;  //Pointer to the swap chain interface
-ID3D11Device *dev;			//Pointer to the direct3D device interface
-HRESULT hr;				//Pointer to the HRESULT
-ID3D11DeviceContext *devcon; //the pointer to the direct3D device context
-ID3D11RenderTargetView *backbuffer; //Pointer to the render target
-ID3D11VertexShader *pVS; //the vertex shader
-ID3D11PixelShader *pPS; //the pixel shader
-ID3D11Buffer *pVBuffer; // The Vertex Buffer
-ID3D11Buffer *pIBuffer; //Index Buffer
-ID3D11InputLayout *pLayout; //Layout for shaders
-ID3D11Buffer *cbPerObjectBuffer; //Buffer to store constant buffer variables
-HWND hWnd;
-
-DirectX::XMMATRIX WVP;
-DirectX::XMMATRIX World;
-DirectX::XMMATRIX camView;
-DirectX::XMMATRIX camProjection;
-
-DirectX::XMVECTOR camPosition; //Vector to hold camera position
-DirectX::XMVECTOR camTarget; //Holds camera target
-DirectX::XMVECTOR camUp; //Holds the direction of the camera
-
-std::wstring printText;
-struct cbPerObject
-{
-	DirectX::XMMATRIX WVP;
-};
-
-cbPerObject cbPerObj;
-
-DirectX::XMVECTOR DefaultForward = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-DirectX::XMVECTOR DefaultRight = DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-DirectX::XMVECTOR CamForward = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-DirectX::XMVECTOR CamRight = DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
-
-DirectX::XMMATRIX camRotationMatrix;
-DirectX::XMMATRIX groundWorld;
-
-float moveLeftRight = 0.0f;
-float moveBackFoward = 0.0f;
-
-float camYaw = 0.0f;
-float camPitch = 0.0f;
-
-double countsPerSecond = 0.0;
-__int64 CounterStart = 0;
-
-int frameCount = 0;
-int fps = 0;
-
-__int64 frameTimeOld = 0;
-double frameTime;
-//global struct
-struct VERTEX
-{
-	FLOAT normx, normy, normz; //normal position
-	FLOAT x, y, z; //position
-	D3DXCOLOR Colour; // Colour
-};
-//function prototypes
-void InitD3D(HWND hWnd);  //Sets up and initializes Direct3D
-void CleanD3D(void);	//closes Direct3D and released the memory
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow); //Prototype of window creation
-void RenderFrame(double time); //Renders a single frame
-void InitPipeline(void); //Initialised the shader pipeline
-void InitGraphics(void); //Initialises vertexs
-void UpdateCamera(void); //Camera update function
-bool InitDirectInput(HINSTANCE hInstance); //Initialised input system
-void DetectInput(double time); //Detects input
-void RenderText(std::wstring text, int inInt);
-
-void StartTimer();
-double GetTime();
-double GetFrameTime();
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) //The creation of the window
 {
 	//The handle for the window, filled by  a function
 	//this struct holds information for the window class
 	WNDCLASSEX wc;
 	//Clears out the wndow class
+	Renderer *pRend = new Renderer();
 	ZeroMemory(&wc, sizeof(WNDCLASSEX));
-
 	//this fills in the struct with necessary information
 	wc.cbSize = sizeof(WNDCLASSEX);
 	wc.style = CS_HREDRAW | CS_VREDRAW;
-	wc.lpfnWndProc = WindowProc;
+	wc.lpfnWndProc = (WNDPROC)Renderer::WindowProc;
 	wc.hInstance = hInstance;
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 	//wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
@@ -131,8 +28,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	RECT wr = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT }; //Sets the size but not the position
 	AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE); //Adjust the size
 
+	HWND hWndStore;
 	//creates the window and use the result as the handle
-	hWnd = CreateWindowEx(NULL,
+	hWndStore = CreateWindowEx(NULL,
 		L"WindowClass1", //name of the Window class
 		L"AT Project", //Title of the window
 		WS_OVERLAPPEDWINDOW, //Window Style
@@ -144,17 +42,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		NULL,				//Menu system
 		hInstance,			//Application handle
 		NULL);				//Used with multiple windows
-
+	
+	pRend->sethWnd(hWndStore);
 	//displays the window on the screen
-	ShowWindow(hWnd, nCmdShow);
+	ShowWindow(hWndStore, nCmdShow);
 
-	if (!InitDirectInput(hInstance))
+	if (!pRend->InitDirectInput(hInstance))
 	{
 		MessageBox(0, L"Direct Input Initialization - FAILED", L"ERROR", MB_OK);
 		return 0;
 	}
 	//initialize Direct3D
-	InitD3D(hWnd);
+	pRend->InitD3D(hWndStore);
 	//window Main Loop:
 
 	//Struct holds windows event messages
@@ -180,26 +79,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 		else
 		{
-			frameCount++;
-			if (GetTime() > 1.0f)
+			pRend->frameCount++;
+			if (pRend->GetTime() > 1.0f)
 			{
-				fps = frameCount;
-				frameCount = 0;
-				StartTimer();
+				pRend->fps = pRend->frameCount;
+				pRend->frameCount = 0;
+				pRend->StartTimer();
 			}
-			frameTime = GetFrameTime();
-			RenderFrame(frameTime);
+			pRend->frameTime = pRend->GetFrameTime();
+			pRend->RenderFrame(pRend->frameTime);
 		}
 	}
 
 	//Clear up DirectX and COM
-	CleanD3D();
+	pRend->CleanD3D();
 	//returns this part of the WM_QUIT message to Windows
 	return msg.wParam;
 }
 
 //message handler function for the program
-LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK Renderer::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	//Sort through and find what code to run for the message given
 	switch (message)
@@ -217,7 +116,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 	//Handles any messages the switch statement didn;t
 	return DefWindowProc(hWnd, message, wParam, lParam);
 }
-void InitD3D(HWND hWnd) //The creation of Direct3D to use it
+void Renderer::InitD3D(HWND hWnd) //The creation of Direct3D to use it
 {
 	//create a struct to hold information about the swap chain
 	DXGI_SWAP_CHAIN_DESC scd;
@@ -271,7 +170,7 @@ void InitD3D(HWND hWnd) //The creation of Direct3D to use it
 	InitGraphics();
 }
 
-void CleanD3D() //This cleans up Direct3D and COM
+void Renderer::CleanD3D() //This cleans up Direct3D and COM
 {
 	swapchain->SetFullscreenState(FALSE, NULL); //Switch to windowed mode
 	PostMessage(hWnd, WM_DESTROY, 0, 0);
@@ -290,7 +189,7 @@ void CleanD3D() //This cleans up Direct3D and COM
 	DiMouse->Unacquire();
 	DirectInput->Release();
 }
-void RenderFrame(double time) //renders a single frame
+void Renderer::RenderFrame(double time) //renders a single frame
 {
 	//clears the back buffer to a deep blue
 	devcon->ClearRenderTargetView(backbuffer, D3DXCOLOR(0.0f, 0.2f, 0.4f, 1.0f)); //Fills the render target with a specific colour
@@ -320,7 +219,7 @@ void RenderFrame(double time) //renders a single frame
 	//switch te back buffer and front buffer
 	swapchain->Present(0, 0); // this means everything drawn in the back buffer appears
 }
-void InitPipeline()
+void Renderer::InitPipeline()
 {
 	//Load and compile the two shaders
 	ID3D10Blob *VS, *PS;
@@ -363,33 +262,41 @@ void InitPipeline()
 	//Sets the projection matrix
 	camProjection = DirectX::XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)SCREEN_WIDTH / SCREEN_HEIGHT, 1.0f, 1000.0f);
 }
-void InitGraphics()
+void Renderer::InitGraphics()
 {
 	float length = 1.0f;
 	float height = 1.0f;
 	float width = 1.0f;
 
-	DirectX::XMVECTOR blockPos = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	//create a triangle using the VERTEX struct
+	//create Two cube using the VERTEX struct
 	VERTEX Vertices[] =
 	{
-		{ 0.0f, 0.0f, 1.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
 
-		{ 0.0f, 0.0f, 1.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 1.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ 0.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
+
+		{ 7.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Second cube vertices
+		{ 7.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },	//function can be written to create multiple
+		{ 7.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Using normal allows me to change that to move the cube
+		{ 7.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+
+		{ 7.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ 7.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
+		{ 7.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ 7.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
 	};
-
 	//create the vertex buffer
 	D3D11_BUFFER_DESC bd;
 	ZeroMemory(&bd, sizeof(bd));
 
 	bd.Usage = D3D11_USAGE_DYNAMIC; //write access by CPU and GPU
-	bd.ByteWidth = sizeof(VERTEX) * 8; // Size is the VERTEX struct * 4 - change depending on vertex contained
+	bd.ByteWidth = sizeof(VERTEX) * 16; // Size is the VERTEX struct * - change depending on vertex contained
 	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; // Use as a vertex buffer
 	bd.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE; //Allow CPU to write to buffer
 
@@ -398,7 +305,7 @@ void InitGraphics()
 	//copy the vertices into the buffer
 	D3D11_MAPPED_SUBRESOURCE ms;
 	devcon->Map(pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); //Map the buffer
-	memcpy(ms.pData, Vertices, sizeof(Vertices)); //Copy the data
+	memcpy(ms.pData, &Vertices, sizeof(Vertices)); //Copy the data
 	devcon->Unmap(pVBuffer, NULL);
 
 	//Indices array
@@ -416,6 +323,19 @@ void InitGraphics()
 		0, 5, 1,
 		3, 7, 2,
 		2, 7, 6,
+
+		8, 9, 10, //side list //To render more than one cube, a new index list needs to be made
+		10, 9, 11,	//New list is previous list + 8
+		12, 8, 14,	//Could write a function to handle this
+		14, 8, 10,
+		15, 13, 14,
+		14, 15, 12,
+		11, 9, 15,
+		15, 9, 13,
+		12, 13, 8,
+		8, 13, 9,
+		11, 15, 10,
+		10, 15, 14,
 
 	};
 	//create the index buffer
@@ -435,7 +355,7 @@ void InitGraphics()
 	memcpy(is.pData, indices, sizeof(indices));
 	devcon->Unmap(pIBuffer, NULL);
 }
-void UpdateCamera()
+void Renderer::UpdateCamera()
 {
 	camRotationMatrix = DirectX::XMMatrixRotationRollPitchYaw(camPitch, camYaw, 0);
 	camTarget = DirectX::XMVector3TransformCoord(DefaultForward, camRotationMatrix);
@@ -453,7 +373,7 @@ void UpdateCamera()
 	camTarget = DirectX::XMVectorAdd(camPosition, camTarget);
 	camView = DirectX::XMMatrixLookAtLH(camPosition, camTarget, camUp);
 }
-bool InitDirectInput(HINSTANCE hInstance)
+bool Renderer::InitDirectInput(HINSTANCE hInstance)
 {
 	hr = DirectInput8Create(hInstance,
 		DIRECTINPUT_VERSION,
@@ -469,7 +389,7 @@ bool InitDirectInput(HINSTANCE hInstance)
 	hr = DiMouse->SetCooperativeLevel(hWnd, DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
 	return true;
 }
-void DetectInput(double time)
+void Renderer::DetectInput(double time)
 {
 	DIMOUSESTATE mouseCurrState;
 	BYTE keyboardState[256];
@@ -513,13 +433,13 @@ void DetectInput(double time)
 
 	return;
 }
-void RenderText(std::wstring text, int inInt)
+void Renderer::RenderText(std::wstring text, int inInt)
 {
 	std::wostringstream printString;
 	printString << text << inInt;
 	printText = printString.str();
 }
-void StartTimer()
+void Renderer::StartTimer()
 {
 	LARGE_INTEGER frequencyCount;
 	QueryPerformanceFrequency(&frequencyCount);
@@ -529,13 +449,13 @@ void StartTimer()
 	QueryPerformanceCounter(&frequencyCount);
 	CounterStart = frequencyCount.QuadPart;
 }
-double GetTime()
+double Renderer::GetTime()
 {
 	LARGE_INTEGER currentTime;
 	QueryPerformanceCounter(&currentTime);
 	return double(currentTime.QuadPart - CounterStart) / countsPerSecond;
 }
-double GetFrameTime()
+double Renderer::GetFrameTime()
 {
 	LARGE_INTEGER currentTime;
 	__int64 tickCount;
@@ -550,4 +470,9 @@ double GetFrameTime()
 	}
 	
 	return float(tickCount) / countsPerSecond;
+}
+
+void Renderer::sethWnd(HWND hwnd)
+{
+	hWnd = hwnd;
 }

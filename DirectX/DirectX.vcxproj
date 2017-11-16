@@ -151,11 +151,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="renderer.cpp" />
+    <ClCompile Include="Voxel.cpp" />
+    <ClCompile Include="VoxelManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders.shader">
       <FileType>CppCode</FileType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="renderer.h" />
+    <ClInclude Include="Voxel.h" />
+    <ClInclude Include="VoxelManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

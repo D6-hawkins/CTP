@@ -56,7 +56,8 @@ c:\program files (x86)\microsoft directx sdk (june 2010)\include\d3d10.h(608): w
 c:\program files (x86)\microsoft directx sdk (june 2010)\include\d3d10.h(609): warning C4005: 'D3D10_ERROR_FILE_NOT_FOUND': macro redefinition
   c:\program files (x86)\windows kits\8.1\include\shared\winerror.h(50454): note: see previous definition of 'D3D10_ERROR_FILE_NOT_FOUND'
   c:\program files (x86)\microsoft directx sdk (june 2010)\include\dinput.h: DIRECTINPUT_VERSION undefined. Defaulting to version 0x0800
-c:\users\domin\desktop\ctp\directx\renderer.cpp(486): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-c:\users\domin\desktop\ctp\directx\renderer.cpp(549): warning C4244: '=': conversion from 'float' to '__int64', possible loss of data
+c:\users\domin\desktop\ctp\directx\renderer.cpp(15): warning C4316: 'Renderer': object allocated on the heap may not be aligned 16
+c:\users\domin\desktop\ctp\directx\renderer.cpp(406): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+c:\users\domin\desktop\ctp\directx\renderer.cpp(469): warning C4244: '=': conversion from 'float' to '__int64', possible loss of data
   DirectX.vcxproj -> C:\Users\Domin\Desktop\CTP\Debug\DirectX.exe
   DirectX.vcxproj -> C:\Users\Domin\Desktop\CTP\Debug\DirectX.pdb (Full PDB)
