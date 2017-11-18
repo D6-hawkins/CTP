@@ -1,0 +1,13 @@
+﻿  AudioEngine.cpp
+c:\program files (x86)\windows kits\8.1\include\um\wincodec.h(943): error C3646: 'PixelFormat': unknown override specifier
+c:\program files (x86)\windows kits\8.1\include\um\wincodec.h(943): error C4430: missing type specifier - int assumed. Note: C++ does not support default-int
+c:\users\domin\desktop\ctp\audio\soundcommon.h(260): error C2065: 'XAUDIO2_VOICE_NOSAMPLESPLAYED': undeclared identifier
+c:\users\domin\desktop\ctp\audio\soundcommon.h(283): error C2065: 'XAUDIO2_VOICE_NOSAMPLESPLAYED': undeclared identifier
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(469): error C2660: 'IXAudio2::CreateMasteringVoice': function does not take 7 arguments
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(477): error C2039: 'GetChannelMask': is not a member of 'IXAudio2MasteringVoice'
+  c:\program files (x86)\microsoft directx sdk (june 2010)\include\xaudio2.h(937): note: see declaration of 'IXAudio2MasteringVoice'
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(589): error C2660: 'CreateFX': function does not take 4 arguments
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(689): error C2440: '=': cannot convert from 'void' to 'HRESULT'
+  c:\users\domin\desktop\ctp\audio\audioengine.cpp(689): note: Expressions of type void cannot be converted to other types
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(822): error C2065: 'XAUDIO2_VOICE_NOSAMPLESPLAYED': undeclared identifier
+c:\users\domin\desktop\ctp\audio\audioengine.cpp(1213): error C2065: 'XAUDIO2_VOICE_NOSAMPLESPLAYED': undeclared identifier

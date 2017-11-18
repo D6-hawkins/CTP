@@ -1,121 +1,133 @@
 //Inclusion of basic windows header files and direct3D header files
 #include "renderer.h"
-#define SCREEN_WIDTH 800
-#define SCREEN_HEIGHT 600
-//LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+//DXTK headers
+#include "SimpleMath.h"
 
+//System
+#include <windows.h>
 
-//Input controls
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) //The creation of the window
+//Self-Made Headers
+#include "GameData.h"
+#include "DrawData.h"
+#include "GOList.h"
+Renderer::Renderer(ID3D11Device * _pd3dDevice, HWND _hWnd, HINSTANCE _hInstance)
 {
-	//The handle for the window, filled by  a function
-	//this struct holds information for the window class
-	WNDCLASSEX wc;
-	//Clears out the wndow class
-	Renderer *pRend = new Renderer();
-	ZeroMemory(&wc, sizeof(WNDCLASSEX));
-	//this fills in the struct with necessary information
-	wc.cbSize = sizeof(WNDCLASSEX);
-	wc.style = CS_HREDRAW | CS_VREDRAW;
-	wc.lpfnWndProc = (WNDPROC)Renderer::WindowProc;
-	wc.hInstance = hInstance;
-	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-	//wc.hbrBackground = (HBRUSH)COLOR_WINDOW;
-	wc.lpszClassName = L"WindowClass1";
-	//registers the window class
-	RegisterClassEx(&wc);
+	//Input controller
+	hWnd = _hWnd;
+	DiKeyboard = nullptr;
+	DiMouse = nullptr;
+	DirectInput = nullptr;
+	//Initialised Input
+	InitDirectInput(_hInstance);
 
-	RECT wr = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT }; //Sets the size but not the position
-	AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE); //Adjust the size
+	//Initialises data into the game state and game data being shared between all game objects
+	InitGameData();
 
-	HWND hWndStore;
-	//creates the window and use the result as the handle
-	hWndStore = CreateWindowEx(NULL,
-		L"WindowClass1", //name of the Window class
-		L"AT Project", //Title of the window
-		WS_OVERLAPPEDWINDOW, //Window Style
-		300,				//X position of the window
-		300,				//Y position of the window
-		wr.right - wr.left,	//Width of the window
-		wr.bottom - wr.top,	//height of the window
-		NULL,				//Parent window
-		NULL,				//Menu system
-		hInstance,			//Application handle
-		NULL);				//Used with multiple windows
-	
-	pRend->sethWnd(hWndStore);
-	//displays the window on the screen
-	ShowWindow(hWndStore, nCmdShow);
+	//InitVBGO --Come back to--
+	VBGO::Init(_pd3dDevice);
+	//Window Aspect Ratio helper
+	RECT rc;
+	GetClientRect(hWnd, &rc);
+	UINT width = rc.right - rc.left;
+	UINT height = rc.bottom - rc.top;
+	float AR = (float)width / (float)height;
 
-	if (!pRend->InitDirectInput(hInstance))
-	{
-		MessageBox(0, L"Direct Input Initialization - FAILED", L"ERROR", MB_OK);
-		return 0;
-	}
-	//initialize Direct3D
-	pRend->InitD3D(hWndStore);
-	//window Main Loop:
-
-	//Struct holds windows event messages
-	MSG msg = {0};
-
-	//wait for the next message in the queue, stores the result in msg
-	while (TRUE)
-	{
-		//Checks if any messages are waiting in queue
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
-		{
-			//translates keystroke messages into the right format
-			TranslateMessage(&msg);
-
-			//Sends the message to the windowProc function
-			DispatchMessage(&msg);
-
-			//checks if it's time to quit
-			if (msg.message == WM_QUIT)
-			{
-				break;
-			}
-		}
-		else
-		{
-			pRend->frameCount++;
-			if (pRend->GetTime() > 1.0f)
-			{
-				pRend->fps = pRend->frameCount;
-				pRend->frameCount = 0;
-				pRend->StartTimer();
-			}
-			pRend->frameTime = pRend->GetFrameTime();
-			pRend->RenderFrame(pRend->frameTime);
-		}
-	}
-
-	//Clear up DirectX and COM
-	pRend->CleanD3D();
-	//returns this part of the WM_QUIT message to Windows
-	return msg.wParam;
+	//Make Camera
+	m_cam = new Camera(0.25f * XM_PI, AR, 1.0f, 10000.0f, Vector3::UnitY, Vector3::Zero);
+	m_cam->setPos(Vector3(0.0f, 100.0f, 100.0f));
+	m_GameObjects.push_back(m_cam);
+	//make Light
+	m_light = new Light(Vector3(0.0f, 100.0f, 160.0f), Color(1.0f, 1.0f, 1.0f, 1.0f), Color(0.4f, 0.1f, 0.1f, 1.0f));
+	m_GameObjects.push_back(m_light);
+	//Create draw data
+	InitDrawData();
+	//Do marching cube stuff
+	MarchingCubes* VBMC = new MarchingCubes();
+	VBMC->init(Vector3(-8.0f, -8.0f, -17.0f), Vector3(8.0f, 8.0f, 23.0f), 60.0f*Vector3::One, 0.01, _pd3dDevice);
+	VBMC->setPos(Vector3(100, 0, -100));
+	VBMC->setPitch(-XM_PIDIV2);
+	VBMC->setScale(Vector3(3, 3, 1.5));
+	m_GameObjects.push_back(VBMC);
 }
 
-//message handler function for the program
-LRESULT CALLBACK Renderer::WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+Renderer::~Renderer()
 {
-	//Sort through and find what code to run for the message given
-	switch (message)
+	//Delete data
+	delete m_GD;
+	delete m_DD;
+
+	//Tidy up VBGO
+
+	//Release direct input
+	if (DiKeyboard)
 	{
-		//this message is read when the window is closed
-		case WM_DESTROY:
-		{
-			//Closes the application
-			PostQuitMessage(0);
-			return 0;
-			break;
-		}
+		DiKeyboard->Unacquire();
+		DiKeyboard->Release();
+	}
+	if (DiMouse)
+	{
+		DiMouse->Unacquire();
+		DiMouse->Release();
+	}
+	if (DirectInput)
+	{
+		DirectInput->Release();
 	}
 
-	//Handles any messages the switch statement didn;t
-	return DefWindowProc(hWnd, message, wParam, lParam);
+	//Delete all gameobjects
+	for (std::list<GameObject*>::iterator it = m_GameObjects.begin(); it != m_GameObjects.end(); it++)
+	{
+		delete (*it);
+	}
+	m_GameObjects.clear();
 }
+
+bool Renderer::Tick()
+{
+	DetectInput();
+
+	RECT window;
+	GetWindowRect(hWnd, &window);
+	SetCursorPos((window.left + window.right) >> 1, (window.bottom + window.top) >> 1);
+
+	//Calculate Delta Time
+	DWORD currentTime = GetTickCount();
+	m_GD->m_dt = min((float)(currentTime - play_time) / 1000.0f, 0.1f);
+	play_time = currentTime;
+
+
+	//State System Implementation
+
+	switch (m_GD->m_GS)
+	{
+	case GS_MAIN_CAM:
+		PlayTick();
+	}
+	return true;
+}
+void Renderer::PlayTick()
+{
+	//Update all objects
+	for (std::list<GameObject*>::iterator it = m_GameObjects.begin(); it != m_GameObjects.end(); it++)
+	{
+		(*it)->Tick(m_GD);
+	}
+}
+
+void Renderer::Draw(ID3D11DeviceContext * _pd3dImmediateContext)
+{
+	m_DD->m_pd3dImmediateContext = _pd3dImmediateContext;
+
+	//VBGO update constant buffer m_DD
+
+	//draw all objects
+	for (std::list<GameObject*>::iterator it = m_GameObjects.begin(); it != m_GameObjects.end(); it++)
+	{
+		(*it)->Draw(m_DD);
+	}
+}
+
+
 void Renderer::InitD3D(HWND hWnd) //The creation of Direct3D to use it
 {
 	//create a struct to hold information about the swap chain
@@ -126,8 +138,8 @@ void Renderer::InitD3D(HWND hWnd) //The creation of Direct3D to use it
 	//fill the swap chain description struct
 	scd.BufferCount = 1;	//One Back Buffer
 	scd.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; //Use 32-bit colours
-	scd.BufferDesc.Width = SCREEN_WIDTH; //Set the back buffer width
-	scd.BufferDesc.Height = SCREEN_HEIGHT; //Set the back buffer height
+	scd.BufferDesc.Width = 100; //Set the back buffer width
+	scd.BufferDesc.Height = 100; //Set the back buffer height
 	scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; //How swap chain is to be used
 	scd.OutputWindow = hWnd; // The window to be used
 	scd.SampleDesc.Count = 4; // How many multi samples
@@ -163,8 +175,8 @@ void Renderer::InitD3D(HWND hWnd) //The creation of Direct3D to use it
 
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
-	viewport.Width = SCREEN_WIDTH;
-	viewport.Height = SCREEN_HEIGHT;
+	viewport.Width = 100;
+	viewport.Height = 100;
 	devcon->RSSetViewports(1, &viewport); //Activates viewport structs
 	InitPipeline();
 	InitGraphics();
@@ -192,10 +204,10 @@ void Renderer::CleanD3D() //This cleans up Direct3D and COM
 void Renderer::RenderFrame(double time) //renders a single frame
 {
 	//clears the back buffer to a deep blue
-	devcon->ClearRenderTargetView(backbuffer, D3DXCOLOR(0.0f, 0.2f, 0.4f, 1.0f)); //Fills the render target with a specific colour
+	//devcon->ClearRenderTargetView(backbuffer, D3DXCOLOR(0.0f, 0.2f, 0.4f, 1.0f)); //Fills the render target with a specific colour
 
 	////select which vertex buffer to display
-	UINT stride = sizeof(VERTEX);
+	UINT stride = 10;
 	UINT offset = 0;
 	devcon->IASetVertexBuffers(0, 1, &pVBuffer, &stride, &offset);
 	devcon->IASetIndexBuffer(pIBuffer, DXGI_FORMAT_R16_UINT, 0);
@@ -213,7 +225,7 @@ void Renderer::RenderFrame(double time) //renders a single frame
 	devcon->IASetPrimitiveTopology(D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	//draw the vertex bufer to the back buffer
-	DetectInput(time);
+	DetectInput();
 	//devcon->Draw(8, 0);
 	devcon->DrawIndexed(100, 0, 0);
 	//switch te back buffer and front buffer
@@ -221,46 +233,46 @@ void Renderer::RenderFrame(double time) //renders a single frame
 }
 void Renderer::InitPipeline()
 {
-	//Load and compile the two shaders
-	ID3D10Blob *VS, *PS;
-	D3DX11CompileFromFile(L"shaders.shader", 0, 0, "VShader", "vs_4_0", 0, 0, 0, &VS, 0, 0);
-	D3DX11CompileFromFile(L"shaders.shader", 0, 0, "PShader", "ps_4_0", 0, 0, 0, &PS, 0, 0);
-
-	// encapsulate both shaders into shader obejcts
-	dev->CreateVertexShader(VS->GetBufferPointer(), VS->GetBufferSize(), NULL, &pVS);
-	dev->CreatePixelShader(PS->GetBufferPointer(), PS->GetBufferSize(), NULL, &pPS);
-
-	//Set the shader objects
-	devcon->VSSetShader(pVS, 0, 0);
-	devcon->PSSetShader(pPS, 0, 0);
-	//create the input layout object
-	D3D11_INPUT_ELEMENT_DESC ied[] =
-	{
-		{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
-	};
-
-	dev->CreateInputLayout(ied, 3, VS->GetBufferPointer(), VS->GetBufferSize(), &pLayout);
-	devcon->IASetInputLayout(pLayout);
-
-	D3D11_BUFFER_DESC cbbd;
-	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
-
-	cbbd.Usage = D3D11_USAGE_DEFAULT;
-	cbbd.ByteWidth = sizeof(cbPerObject);
-	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	cbbd.CPUAccessFlags = 0;
-	cbbd.MiscFlags = 0;
-	dev->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
-	//Camera information
-	camPosition = DirectX::XMVectorSet(0.0f, 0.0f, -5.0f, 0.0f);
-	camTarget = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	camUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	//Sets the view matrix
-	camView = DirectX::XMMatrixLookAtLH(camPosition, camTarget, camUp);
-	//Sets the projection matrix
-	camProjection = DirectX::XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)SCREEN_WIDTH / SCREEN_HEIGHT, 1.0f, 1000.0f);
+//	//Load and compile the two shaders
+//	ID3D10Blob *VS, *PS;
+ D3DX11CompileFromFile(L"shaders.shader", 0, 0, "VShader", "vs_4_0", 0, 0, 0, &VS, 0, 0);
+//	//D3DX11CompileFromFile(L"shaders.shader", 0, 0, "PShader", "ps_4_0", 0, 0, 0, &PS, 0, 0);
+//
+//	// encapsulate both shaders into shader obejcts
+//	//dev->CreateVertexShader(VS->GetBufferPointer(), VS->GetBufferSize(), NULL, &pVS);
+//	//dev->CreatePixelShader(PS->GetBufferPointer(), PS->GetBufferSize(), NULL, &pPS);
+//
+//	//Set the shader objects
+//	devcon->VSSetShader(pVS, 0, 0);
+//	devcon->PSSetShader(pPS, 0, 0);
+//	//create the input layout object
+//	D3D11_INPUT_ELEMENT_DESC ied[] =
+//	{
+//		{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+//		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+//		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0},
+//	};
+//
+//	dev->CreateInputLayout(ied, 3, VS->GetBufferPointer(), VS->GetBufferSize(), &pLayout);
+//	devcon->IASetInputLayout(pLayout);
+//
+//	D3D11_BUFFER_DESC cbbd;
+//	ZeroMemory(&cbbd, sizeof(D3D11_BUFFER_DESC));
+//
+//	cbbd.Usage = D3D11_USAGE_DEFAULT;
+//	cbbd.ByteWidth = sizeof(cbPerObject);
+//	cbbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+//	cbbd.CPUAccessFlags = 0;
+//	cbbd.MiscFlags = 0;
+//	dev->CreateBuffer(&cbbd, NULL, &cbPerObjectBuffer);
+//	//Camera information
+//	camPosition = DirectX::XMVectorSet(0.0f, 0.0f, -5.0f, 0.0f);
+//	camTarget = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+//	camUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+//	//Sets the view matrix
+//	camView = DirectX::XMMatrixLookAtLH(camPosition, camTarget, camUp);
+//	//Sets the projection matrix
+//	camProjection = DirectX::XMMatrixPerspectiveFovLH(0.4f*3.14f, (float)SCREEN_WIDTH / SCREEN_HEIGHT, 1.0f, 1000.0f);
 }
 void Renderer::InitGraphics()
 {
@@ -268,45 +280,45 @@ void Renderer::InitGraphics()
 	float height = 1.0f;
 	float width = 1.0f;
 
-	//create Two cube using the VERTEX struct
-	VERTEX Vertices[] =
-	{
-		{ 0.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+	////create Two cube using the VERTEX struct
+	//VERTEX Vertices[] =
+	//{
+	//	{ 0.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
 
-		{ 0.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
-		{ 0.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
+	//	{ 0.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
 
-		{ 7.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Second cube vertices
-		{ 7.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },	//function can be written to create multiple
-		{ 7.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Using normal allows me to change that to move the cube
-		{ 7.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+	//	{ 7.0f, 0.0f, 0.0f, -length, height, -width , D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Second cube vertices
+	//	{ 7.0f, 0.0f, 0.0f, length, height, -width, D3DXCOLOR(0.0f, 1.0f, 0.0f, 1.0f) },	//function can be written to create multiple
+	//	{ 7.0f, 0.0f, 0.0f, -length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 0.0f, 1.0f) }, //Using normal allows me to change that to move the cube
+	//	{ 7.0f, 0.0f, 0.0f, length, -height, -width, D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
 
-		{ 7.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
-		{ 7.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
-		{ 7.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
-		{ 7.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
-	};
+	//	{ 7.0f, 0.0f, 0.0f, -length, height, width , D3DXCOLOR(1.0f, 0.0f, 1.0f, 1.0f) },
+	//	{ 7.0f, 0.0f, 0.0f, length, height, width, D3DXCOLOR(0.0f, 0.0f, 0.0f, 1.0f) },
+	//	{ 7.0f, 0.0f, 0.0f, -length, -height, width, D3DXCOLOR(1.0f, 1.0f, 0.0f, 1.0f) },
+	//	{ 7.0f, 0.0f, 0.0f, length, -height, width, D3DXCOLOR(1.0f, 1.0f, 1.0f, 1.0f) },
+	//};
 	//create the vertex buffer
-	D3D11_BUFFER_DESC bd;
-	ZeroMemory(&bd, sizeof(bd));
+	//D3D11_BUFFER_DESC bd;
+	//ZeroMemory(&bd, sizeof(bd));
 
-	bd.Usage = D3D11_USAGE_DYNAMIC; //write access by CPU and GPU
-	bd.ByteWidth = sizeof(VERTEX) * 16; // Size is the VERTEX struct * - change depending on vertex contained
-	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; // Use as a vertex buffer
-	bd.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE; //Allow CPU to write to buffer
+	//bd.Usage = D3D11_USAGE_DYNAMIC; //write access by CPU and GPU
+	//bd.ByteWidth = sizeof(VERTEX) * 16; // Size is the VERTEX struct * - change depending on vertex contained
+	//bd.BindFlags = D3D11_BIND_VERTEX_BUFFER; // Use as a vertex buffer
+	//bd.CPUAccessFlags = D3D10_CPU_ACCESS_WRITE; //Allow CPU to write to buffer
 
-	dev->CreateBuffer(&bd, NULL, &pVBuffer); //create the buffer
+	//dev->CreateBuffer(&bd, NULL, &pVBuffer); //create the buffer
 
-	//copy the vertices into the buffer
-	D3D11_MAPPED_SUBRESOURCE ms;
-	devcon->Map(pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); //Map the buffer
-	memcpy(ms.pData, &Vertices, sizeof(Vertices)); //Copy the data
-	devcon->Unmap(pVBuffer, NULL);
+	////copy the vertices into the buffer
+	//D3D11_MAPPED_SUBRESOURCE ms;
+	//devcon->Map(pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms); //Map the buffer
+	//memcpy(ms.pData, &Vertices, sizeof(Vertices)); //Copy the data
+	//devcon->Unmap(pVBuffer, NULL);
 
 	//Indices array
 	short indices[] =
@@ -389,7 +401,26 @@ bool Renderer::InitDirectInput(HINSTANCE hInstance)
 	hr = DiMouse->SetCooperativeLevel(hWnd, DISCL_EXCLUSIVE | DISCL_NOWINKEY | DISCL_FOREGROUND);
 	return true;
 }
-void Renderer::DetectInput(double time)
+void Renderer::InitGameData()
+{
+	m_GD = new GameData;
+	m_GD->m_keyboardState = m_keyboardState;
+	m_GD->m_prevkKeyboardState = m_prevKeyboardState;
+	m_GD->m_GS = GS_MAIN_CAM;
+	m_GD->m_mouseState = &mouseLastState;
+
+
+
+}
+void Renderer::InitDrawData()
+{
+	m_DD = new DrawData;
+	m_DD->m_pd3dImmediateContext = nullptr;
+	m_DD->m_cam = m_cam;
+	m_DD->m_light = m_light;
+
+}
+void Renderer::DetectInput()
 {
 	DIMOUSESTATE mouseCurrState;
 	BYTE keyboardState[256];
@@ -403,7 +434,7 @@ void Renderer::DetectInput(double time)
 	if (keyboardState[DIK_ESCAPE] & 0x80)
 		PostMessage(hWnd, WM_DESTROY, 0, 0);
 
-	float speed = 15.0f * time;
+	float speed = 15.0f * m_GD->m_dt;
 
 	if (keyboardState[DIK_A] & 0x80)
 	{
@@ -429,15 +460,9 @@ void Renderer::DetectInput(double time)
 
 		mouseLastState = mouseCurrState;
 	}
-	UpdateCamera();
+	//UpdateCamera();
 
 	return;
-}
-void Renderer::RenderText(std::wstring text, int inInt)
-{
-	std::wostringstream printString;
-	printString << text << inInt;
-	printText = printString.str();
 }
 void Renderer::StartTimer()
 {
@@ -472,7 +497,3 @@ double Renderer::GetFrameTime()
 	return float(tickCount) / countsPerSecond;
 }
 
-void Renderer::sethWnd(HWND hwnd)
-{
-	hWnd = hwnd;
-}
